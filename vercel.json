@@ -6,25 +6,12 @@
     }
   },
   "routes": [
-    {
-      "src": "/modern",
-      "dest": "/modern-frontend.html"
-    },
-    {
-      "src": "/",
-      "dest": "/modern-frontend.html"
-    },
-    {
-      "src": "/api/(.*)",
-      "dest": "/web-server.js"
-    },
-    {
-      "src": "/(.*)",
-      "dest": "/web-server.js"
-    }
-  ],
-  "rewrites": [
-    { "source": "/api/(.*)", "destination": "/web-server.js" },
-    { "source": "/(.*)", "destination": "/web-server.js" }
+    { "src": "/modern-frontend.html", "dest": "/modern-frontend.html" },
+    { "src": "/global.css", "dest": "/global.css" },
+    { "src": "/api/(.*)", "dest": "/web-server.js" },
+    { "src": "/blogs/(.*)", "dest": "/web-server.js" },
+    { "src": "/imagesofblog/(.*)", "dest": "/web-server.js" },
+    { "src": "/", "dest": "/web-server.js" },
+    { "src": "/(.*)", "dest": "/web-server.js" }
   ]
 }
