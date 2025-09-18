@@ -1,0 +1,30 @@
+{
+  "version": 2,
+  "functions": {
+    "web-server.js": {
+      "runtime": "nodejs18.x"
+    }
+  },
+  "routes": [
+    {
+      "src": "/modern",
+      "dest": "/modern-frontend.html"
+    },
+    {
+      "src": "/",
+      "dest": "/modern-frontend.html"
+    },
+    {
+      "src": "/api/(.*)",
+      "dest": "/web-server.js"
+    },
+    {
+      "src": "/(.*)",
+      "dest": "/web-server.js"
+    }
+  ],
+  "rewrites": [
+    { "source": "/api/(.*)", "destination": "/web-server.js" },
+    { "source": "/(.*)", "destination": "/web-server.js" }
+  ]
+}

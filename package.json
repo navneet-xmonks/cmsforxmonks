@@ -8,6 +8,8 @@
   },
   "scripts": {
     "start": "node web-server.js",
+    "build": "echo 'Build complete'",
+    "vercel-build": "echo 'Vercel build complete'",
     "dev": "nodemon web-server.js",
     "cli": "node blog-cms.js",
     "web": "node web-server.js",
