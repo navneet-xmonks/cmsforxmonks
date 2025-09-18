@@ -17,15 +17,3 @@ handlers:
 - url: /.*
   script: auto
   secure: always
-
-# Skip files that don't need to be deployed
-skip_files:
-- ^(.*/)?#.*#$
-- ^(.*/)?.*~$
-- ^(.*/)?.*\.py[co]$
-- ^(.*/)?.*/RCS/.*$
-- ^(.*/)?\..*$
-- node_modules/
-- README.md
-- .gitignore
-- .git/
