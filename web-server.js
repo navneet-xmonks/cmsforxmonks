@@ -11,7 +11,9 @@ const BlogCMS = require('./blog-cms');
 class WebCMSServer {
     constructor(port = process.env.PORT || 3000) {
         this.port = port;
-        this.cms = new BlogCMS();
+        // Detect if running in serverless environment (GCP App Engine)
+        const isServerless = !!process.env.GAE_SERVICE || !!process.env.PORT;
+        this.cms = new BlogCMS(isServerless);
         this.server = http.createServer(this.handleRequest.bind(this));
         
         console.log('🌟 xMonks Blog CMS Web Server 🌟');
@@ -633,38 +635,41 @@ class WebCMSServer {
             // Generate filename and save
             const slug = this.cms.generateSlug(blogData.title);
             const filename = `${slug}.html`;
-            const filePath = path.join('./blogs', filename);
             
-            // Ensure blogs directory exists
-            if (!fs.existsSync('./blogs')) {
-                fs.mkdirSync('./blogs', { recursive: true });
-            }
-            
-            fs.writeFileSync(filePath, html);
+            // In serverless environment, we can't write files
+            // Instead, we'll return the HTML content for download
+            console.log(`✅ Generated blog HTML: ${filename}`);
 
-            // Add to blogs.json
+            // Prepare blog entry data (for potential future database storage)
             const featureImageName = blogData.featureImage?.name || '';
             const blogEntry = {
                 title: blogData.title,
                 date: this.cms.formatDate(blogData.date),
                 image: featureImageName ? `./blogs/imagesofblog/${featureImageName}` : "",
                 link: `./blogs/${filename}`,
-                category: blogData.category
+                category: blogData.category,
+                html: html, // Include HTML content for download
+                filename: filename
             };
 
-            this.cms.blogs.push(blogEntry);
-            this.cms.saveBlogs();
+            // Note: In serverless environment, we can't update blogs.json persistently
+            console.log(`📝 Blog entry prepared: ${blogData.title}`);
+            
+            // Skip saveBlogs() in serverless environment as it can't persist
+            console.log('📄 Serverless mode: HTML generated in memory for download');
 
-            // Send success response with download info
+            // Send success response with blog content for immediate download
             res.writeHead(200, { 'Content-Type': 'application/json' });
             res.end(JSON.stringify({
                 success: true,
-                message: 'Blog post created successfully!',
+                message: 'Blog post created successfully! Ready for download.',
                 filename: filename,
-                path: filePath,
+                html: html, // Include HTML content for download
+                blogEntry: blogEntry, // Include blog metadata
                 featureImage: featureImageName || 'none',
                 contentImage: blogData.contentImage?.name || 'none',
-                downloadUrl: `/api/download-blog?filename=${encodeURIComponent(filename)}&featureImage=${encodeURIComponent(featureImageName || '')}&contentImage=${encodeURIComponent(blogData.contentImage?.name || '')}`
+                serverlessMode: true,
+                downloadReady: true
             }));
 
             console.log(`✅ Blog created: ${filename}`);
