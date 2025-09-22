@@ -274,32 +274,34 @@ class WebCMSServer {
                         return this.sendError(res, 'No DOCX file uploaded');
                     }
 
-                    // Ensure imagesofblog directory exists
-                    if (!fs.existsSync('./imagesofblog')) {
-                        fs.mkdirSync('./imagesofblog', { recursive: true });
-                    }
-
-                    // Track extracted images
+                    // Track extracted images with base64 data for GCP compatibility
                     const extractedImages = [];
                     let imageCounter = 0;
 
-                    // Custom image converter to save images as files
+                    // Custom image converter to handle images as base64 (serverless-friendly)
                     const options = {
                         convertImage: mammoth.images.imgElement(function(image) {
                             imageCounter++;
                             const extension = image.contentType.split('/')[1] || 'png';
                             const fileName = `extracted-image-${Date.now()}-${imageCounter}.${extension}`;
-                            const imagePath = path.join('./imagesofblog', fileName);
                             
-                            // Save image to file
+                            // Convert image to base64 for serverless environment
                             return image.read().then(function(imageBuffer) {
-                                fs.writeFileSync(imagePath, imageBuffer);
-                                extractedImages.push(fileName);
-                                console.log(`📸 Extracted image: ${fileName}`);
+                                const base64 = imageBuffer.toString('base64');
+                                const mimeType = image.contentType || 'image/png';
+                                const dataUri = `data:${mimeType};base64,${base64}`;
                                 
-                                // Return img tag with relative path
+                                extractedImages.push({
+                                    fileName: fileName,
+                                    base64: base64,
+                                    mimeType: mimeType,
+                                    dataUri: dataUri
+                                });
+                                console.log(`📸 Extracted image: ${fileName} (${Math.round(imageBuffer.length / 1024)}KB)`);
+                                
+                                // Return img tag with data URI
                                 return {
-                                    src: `./imagesofblog/${fileName}`,
+                                    src: dataUri,
                                     alt: `Extracted image ${imageCounter}`
                                 };
                             });
@@ -362,9 +364,10 @@ class WebCMSServer {
                         content: plainText, // Add plain text content for smart parsing
                         sections: sections,
                         jsonLD: jsonLD,
-                        extractedImages: extractedImages, // List of extracted image filenames
-                        featureImage: extractedImages[0] || '', // First image as feature
-                        contentImage: extractedImages[1] || '', // Second image as content
+                        extractedImages: extractedImages, // List of extracted image objects with base64
+                        featureImage: extractedImages[0] ? extractedImages[0].dataUri : '', // First image as feature
+                        contentImage: extractedImages[1] ? extractedImages[1].dataUri : '', // Second image as content
+                        imageCount: extractedImages.length, // Number of images found
                         messages: htmlResult.messages
                     }));
 
