@@ -2,6 +2,7 @@ const http = require('http');
 const fs = require('fs');
 const path = require('path');
 const url = require('url');
+const os = require('os');
 const { IncomingForm } = require('formidable');
 const mammoth = require('mammoth');
 const archiver = require('archiver');
@@ -248,16 +249,16 @@ class WebCMSServer {
 
     async handleParseDocx(req, res) {
         try {
+            // Use system temp directory for GCP compatibility
+            const tempDir = os.tmpdir();
+            
             const form = new IncomingForm({
-                uploadDir: './temp',
+                uploadDir: tempDir,
                 keepExtensions: true,
                 maxFileSize: 50 * 1024 * 1024, // 50MB limit
             });
 
-            // Ensure temp directory exists
-            if (!fs.existsSync('./temp')) {
-                fs.mkdirSync('./temp', { recursive: true });
-            }
+            // No need to create temp directory - os.tmpdir() always exists
 
             form.parse(req, async (err, fields, files) => {
                 if (err) {
