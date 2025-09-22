@@ -1013,6 +1013,75 @@
             }
         }
 
+        // Client-side ZIP creation for serverless mode
+        async function createClientSideZip(result) {
+            // Load JSZip library if not already loaded
+            if (typeof JSZip === 'undefined') {
+                console.log('Loading JSZip library...');
+                const script = document.createElement('script');
+                script.src = 'https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js';
+                document.head.appendChild(script);
+                
+                await new Promise((resolve) => {
+                    script.onload = resolve;
+                });
+            }
+            
+            const zip = new JSZip();
+            
+            // Add the HTML file
+            zip.file(result.filename, result.html);
+            
+            // Add images if they exist
+            const images = [];
+            if (result.blogEntry && result.blogEntry.featureImage && result.blogEntry.featureImage !== 'none') {
+                // Get feature image from the form
+                const featureImageInput = document.getElementById('featureImage');
+                if (featureImageInput && featureImageInput.files[0]) {
+                    images.push({
+                        name: result.featureImage,
+                        file: featureImageInput.files[0]
+                    });
+                }
+            }
+            
+            const contentImageInput = document.getElementById('contentImage');
+            if (contentImageInput && contentImageInput.files[0]) {
+                images.push({
+                    name: result.contentImage,
+                    file: contentImageInput.files[0]
+                });
+            }
+            
+            // Add images to ZIP
+            for (const image of images) {
+                if (image.file && image.name !== 'none') {
+                    const arrayBuffer = await image.file.arrayBuffer();
+                    zip.file(`images/${image.name}`, arrayBuffer);
+                    console.log(`📷 Added image to ZIP: ${image.name}`);
+                }
+            }
+            
+            // Generate and download ZIP
+            const zipBlob = await zip.generateAsync({ type: 'blob' });
+            
+            // Create download link
+            const downloadLink = document.createElement('a');
+            downloadLink.href = URL.createObjectURL(zipBlob);
+            downloadLink.download = `${result.filename.replace('.html', '')}-blog-package.zip`;
+            downloadLink.style.display = 'none';
+            document.body.appendChild(downloadLink);
+            downloadLink.click();
+            document.body.removeChild(downloadLink);
+            
+            // Clean up object URL
+            setTimeout(() => {
+                URL.revokeObjectURL(downloadLink.href);
+            }, 1000);
+            
+            console.log(`📦 Downloaded: ${downloadLink.download}`);
+        }
+
         // Form submission
         document.getElementById('blogForm').addEventListener('submit', async function(e) {
             e.preventDefault();
@@ -1089,8 +1158,9 @@
                     document.getElementById('successMessage').textContent = result.message;
                     document.getElementById('viewBlogLink').href = `./blogs/${result.filename}`;
                     
-                    // Auto-download ZIP package
+                    // Handle both serverless and regular download modes
                     if (result.downloadUrl) {
+                        // Traditional file-based download
                         console.log('📦 Download URL received:', result.downloadUrl);
                         
                         // Add download button to modal
@@ -1115,8 +1185,25 @@
                                 alert('Auto-download failed. Please use the manual download button.');
                             }
                         }, 1000); // Small delay to let user see success message
+                    } else if (result.serverlessMode && result.html) {
+                        // Serverless mode - create ZIP on client side
+                        console.log('📦 Serverless mode: Creating ZIP client-side');
+                        
+                        // Hide the view blog link since we don't have a file to view
+                        document.getElementById('viewBlogLink').style.display = 'none';
+                        
+                        setTimeout(async () => {
+                            try {
+                                await createClientSideZip(result);
+                                console.log('📦 Client-side ZIP download started');
+                            } catch (error) {
+                                console.error('Client-side ZIP creation failed:', error);
+                                alert('Download failed. Please try again.');
+                            }
+                        }, 1000);
                     } else {
-                        console.error('No download URL in response:', result);
+                        console.error('No download method available in response:', result);
+                        alert('Download not available. Blog created but cannot be downloaded.');
                     }
                     
                     const modal = new bootstrap.Modal(document.getElementById('successModal'));
