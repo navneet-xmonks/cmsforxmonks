@@ -193,7 +193,12 @@
             <div class="p-4">
                 <!-- Document Upload Section -->
                 <div class="form-section">
-                    <h3><i class="fas fa-file-upload icon-badge"></i>Import from Google Docs</h3>
+                    <div class="d-flex justify-content-between align-items-center mb-2">
+                        <h3><i class="fas fa-file-upload icon-badge"></i>Import from Google Docs</h3>
+                        <button type="button" class="btn btn-sm btn-outline-secondary" onclick="toggleDebugMode(); document.getElementById('debugStatus').textContent = debugMode ? 'ON' : 'OFF';">
+                            <i class="fas fa-bug"></i> Debug: <span id="debugStatus">OFF</span>
+                        </button>
+                    </div>
                     <p class="text-muted">Upload a .docx file exported from Google Docs and we'll parse it automatically!</p>
                     
                     <div class="upload-zone" onclick="document.getElementById('docxFile').click()" 
@@ -210,6 +215,56 @@
                         <button type="button" class="btn btn-success mt-3" onclick="useImportedContent()">
                             <i class="fas fa-check"></i> Use This Content
                         </button>
+                    </div>
+
+                    <!-- Debug Panel -->
+                    <div id="debugPanel" class="parsed-content bg-light" style="display: none;">
+                        <div class="d-flex justify-content-between align-items-center mb-3">
+                            <h5><i class="fas fa-bug text-warning"></i> Parsing Debug Information</h5>
+                            <button type="button" class="btn btn-sm btn-outline-secondary" onclick="toggleDebugPanel()">
+                                <i class="fas fa-times"></i> Hide Debug
+                            </button>
+                        </div>
+                        <div id="debugContent">
+                            <div class="accordion" id="debugAccordion">
+                                <div class="accordion-item">
+                                    <h2 class="accordion-header">
+                                        <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#debugRaw">
+                                            Raw Content Analysis
+                                        </button>
+                                    </h2>
+                                    <div id="debugRaw" class="accordion-collapse collapse">
+                                        <div class="accordion-body">
+                                            <div id="debugRawContent" class="text-monospace small"></div>
+                                        </div>
+                                    </div>
+                                </div>
+                                <div class="accordion-item">
+                                    <h2 class="accordion-header">
+                                        <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#debugFAQ">
+                                            FAQ Detection Process
+                                        </button>
+                                    </h2>
+                                    <div id="debugFAQ" class="accordion-collapse collapse">
+                                        <div class="accordion-body">
+                                            <div id="debugFAQContent" class="text-monospace small"></div>
+                                        </div>
+                                    </div>
+                                </div>
+                                <div class="accordion-item">
+                                    <h2 class="accordion-header">
+                                        <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#debugContent">
+                                            Content Cleaning Process
+                                        </button>
+                                    </h2>
+                                    <div id="debugContentProcess" class="accordion-collapse collapse">
+                                        <div class="accordion-body">
+                                            <div id="debugContentProcessContent" class="text-monospace small"></div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
                     </div>
                 </div>
 
@@ -360,16 +415,9 @@
                 </div>
                 <div class="modal-body">
                     <p id="successMessage"></p>
-                    <div class="alert alert-info">
-                        <i class="fas fa-download me-2"></i>
-                        <strong>Download Started!</strong> Your blog package (HTML + Images + blogs.json) will download automatically.
-                    </div>
                     <div class="d-grid gap-2">
                         <a href="#" id="viewBlogLink" class="btn btn-primary" target="_blank">
                             <i class="fas fa-eye me-2"></i>View Blog Post
-                        </a>
-                        <a href="#" id="downloadBtn" class="btn btn-success" style="display: none;">
-                            <i class="fas fa-download me-2"></i>Download Blog Package (ZIP)
                         </a>
                         <button type="button" class="btn btn-secondary" onclick="resetForm()">
                             <i class="fas fa-plus me-2"></i>Create Another Blog
@@ -403,6 +451,84 @@
 
         let parsedBlogData = null;
         let faqCounter = 0;
+        let debugMode = false; // Set to true to enable detailed logging
+        
+        // Debug logging function
+        function debugLog(...args) {
+            if (debugMode) {
+                console.log('🔍 DEBUG:', ...args);
+            }
+        }
+        
+        // Toggle debug mode (call this in browser console if needed)
+        function toggleDebugMode() {
+            debugMode = !debugMode;
+            console.log(`🔧 Debug mode ${debugMode ? 'ENABLED' : 'DISABLED'}`);
+            return debugMode;
+        }
+        
+        // Debug panel functions
+        function toggleDebugPanel() {
+            const panel = document.getElementById('debugPanel');
+            if (panel.style.display === 'none') {
+                panel.style.display = 'block';
+            } else {
+                panel.style.display = 'none';
+            }
+        }
+        
+        function showDebugInfo(data, faqs, mainContentHtml, faqStartIndex) {
+            if (!debugMode) return;
+            
+            const panel = document.getElementById('debugPanel');
+            const rawContent = document.getElementById('debugRawContent');
+            const faqContent = document.getElementById('debugFAQContent');
+            const contentProcessContent = document.getElementById('debugContentProcessContent');
+            
+            // Show raw content analysis
+            rawContent.innerHTML = `
+                <strong>Document Statistics:</strong><br>
+                • HTML Length: ${data.html ? data.html.length : 0} characters<br>
+                • Plain Text Length: ${data.content ? data.content.length : 0} characters<br>
+                • Word Count: ${data.contentQuality ? data.contentQuality.wordCount : 'Unknown'}<br>
+                • Images Found: ${data.extractedImages ? data.extractedImages.length : 0}<br>
+                • Has Structured Data: ${data.contentQuality ? data.contentQuality.hasStructuredData : 'Unknown'}<br>
+                • Questions Detected: ${data.contentQuality ? data.contentQuality.hasQuestions : 0}<br>
+                <br>
+                <strong>First 300 characters of HTML:</strong><br>
+                <code>${data.html ? data.html.substring(0, 300).replace(/</g, '&lt;') + '...' : 'No HTML content'}</code>
+                <br><br>
+                <strong>First 300 characters of Plain Text:</strong><br>
+                <code>${data.content ? data.content.substring(0, 300) + '...' : 'No plain text content'}</code>
+            `;
+            
+            // Show FAQ detection process
+            faqContent.innerHTML = `
+                <strong>FAQ Detection Results:</strong><br>
+                • FAQs Found: ${faqs ? faqs.length : 0}<br>
+                • FAQ Section Start: ${faqStartIndex >= 0 ? `Line ${faqStartIndex}` : 'Not found'}<br>
+                • Detection Method: ${data.content && data.content.includes('"name":') ? 'JSON Format' : faqStartIndex >= 0 ? 'Structured Section' : 'Fallback Pattern'}<br>
+                • Has FAQ Markers: ${data.content && data.content.match(/\b(FAQs?|Frequently Asked Questions?)\s*[:.]?\s*$/im) ? 'Yes' : 'No'}<br>
+                <br>
+                ${faqs && faqs.length > 0 ? '<strong>Detected FAQs:</strong><br>' + 
+                    faqs.map((faq, i) => `${i + 1}. Q: "${faq.question.substring(0, 60)}..."<br>   A: "${faq.answer.substring(0, 80)}..."<br>`).join('<br>') : 
+                    'No FAQs detected in document'
+                }
+            `;
+            
+            // Show content cleaning process
+            contentProcessContent.innerHTML = `
+                <strong>Content Cleaning Results:</strong><br>
+                • Original HTML Length: ${data.html ? data.html.length : 0}<br>
+                • Cleaned Content Length: ${mainContentHtml ? mainContentHtml.length : 0}<br>
+                • Content Reduction: ${data.html && mainContentHtml ? Math.round((1 - mainContentHtml.length / data.html.length) * 100) + '%' : 'N/A'}<br>
+                <br>
+                <strong>Final Cleaned Content (first 500 chars):</strong><br>
+                <code>${mainContentHtml ? mainContentHtml.substring(0, 500).replace(/</g, '&lt;') + '...' : 'No content available'}</code>
+            `;
+            
+            panel.style.display = 'block';
+        }
 
         // File upload handlers
         function handleDragOver(e) {
@@ -462,6 +588,7 @@
         // Smart content parser that auto-fills form fields
         function smartParseAndFillForm(data) {
             console.log('📄 Received DOCX data:', data);
+            debugLog('Full received data:', data);
             
             // Use HTML content for parsing (preserves formatting)
             const htmlContent = data.html || '';
@@ -469,6 +596,8 @@
             
             console.log('🏷️ HTML content:', htmlContent.substring(0, 200) + '...');
             console.log('📝 Plain text content:', plainTextContent.substring(0, 200) + '...');
+            debugLog('Complete HTML content:', htmlContent);
+            debugLog('Complete plain text content:', plainTextContent);
             
             // Use plain text for line-by-line parsing but keep HTML for final content
             let workingContent = plainTextContent;
@@ -610,11 +739,25 @@
             let tempQuestion = '';
             let tempQuestionIndex = -1;
             
-            // If content looks like it contains JSON-formatted FAQs, parse them differently
+            // Precise FAQ Section Detection
+            console.log('🔍 Starting precise FAQ section detection...');
+            
+            // Method 1: Find dedicated FAQ section
+            const faqSectionStart = workingContent.search(/\b(FAQs?|Frequently Asked Questions?)\s*[:.]?\s*$/im);
+            let faqStartIndex = -1;
+            
+            if (faqSectionStart !== -1) {
+                // Find the line index where FAQ section starts
+                const contentBeforeFAQ = workingContent.substring(0, faqSectionStart);
+                const linesBeforeFAQ = contentBeforeFAQ.split('\n').length;
+                faqStartIndex = linesBeforeFAQ;
+                console.log(`📋 Found FAQ section starting at line ${faqStartIndex}`);
+            }
+            
+            // Method 2: JSON-formatted FAQ detection (only in FAQ section or if no section found)
             if (workingContent.includes('"name":') && workingContent.includes('"text":')) {
-                console.log('🔍 Detected JSON-formatted FAQ content, parsing specially...');
+                console.log('🔍 Detected JSON-formatted FAQ content...');
                 
-                // Extract FAQ pairs from JSON-like format
                 const nameMatches = workingContent.match(/"name":\s*"([^"]+)"/g);
                 const textMatches = workingContent.match(/"text":\s*"([^"]+)"/g);
                 
@@ -624,206 +767,255 @@
                         const answer = textMatches[i].replace(/"text":\s*"/, '').replace(/"$/, '');
                         
                         if (question && answer) {
-                            faqs.push({
-                                question: question,
-                                answer: answer
-                            });
-                            console.log(`📋 JSON FAQ detected: Q: "${question.substring(0, 50)}..." A: "${answer.substring(0, 50)}..."`);
+                            faqs.push({ question, answer });
+                            console.log(`📋 JSON FAQ: Q: "${question.substring(0, 40)}..."`);
                         }
                     }
                 }
                 
-                // Mark all lines as used since we extracted everything
+                // Mark JSON lines as used
                 for (let i = 0; i < lines.length; i++) {
                     if (lines[i].includes('"name":') || lines[i].includes('"text":')) {
                         usedLines.add(i);
                     }
                 }
-            } else {
-                // Regular FAQ parsing for standard format
-                for (let i = 1; i < lines.length; i++) {
-                    const line = lines[i];
+            }
+            
+            // Method 3: Structured FAQ parsing (numbered questions)
+            if (faqs.length === 0 && faqStartIndex >= 0) {
+                console.log(`📋 Parsing structured FAQ section starting from line ${faqStartIndex}`);
+                
+                // Only look for FAQs after the FAQ section marker
+                for (let i = faqStartIndex; i < lines.length; i++) {
+                    const line = lines[i].trim();
+                    if (!line || usedLines.has(i)) continue;
                     
-                    // Skip JSON-LD content
-                    if (line.includes('{') || line.includes('}') || line.includes('"@context"') || line.includes('"@type"')) {
-                        usedLines.add(i);
-                        continue;
-                    }
+                    // Look for numbered questions (1. 2. etc.) or clear question patterns
+                    const isNumberedQuestion = line.match(/^\d+\.\s*(.+\?)\s*$/);
+                    const isStandaloneQuestion = (
+                        line.endsWith('?') && 
+                        line.length > 10 && 
+                        !line.includes('youtube.com') &&
+                        (line.match(/^(how|what|why|when|where|who|which|can|should|will|do|does|is|are)\s+/i) || 
+                         line.match(/\?\s*$/)
+                        )
+                    );
                     
-                    // Skip iframe/video content
-                    if (line.includes('<iframe') || line.includes('youtube.com/embed') || line.includes('</iframe>')) {
-                        usedLines.add(i);
-                        continue;
-                    }
-                    
-                    // Check if line is a question (ends with ?)
-                    if (line.endsWith('?') && line.length > 10) {
-                        tempQuestion = line;
-                        tempQuestionIndex = i;
-                    } else if (tempQuestion && line.length > 20 && !line.endsWith('?')) {
-                        // This looks like an answer to the previous question
-                        faqs.push({
-                            question: tempQuestion,
-                            answer: line
-                        });
-                        console.log(`📋 FAQ detected: Q: "${tempQuestion.substring(0, 50)}..." A: "${line.substring(0, 50)}..."`);
+                    if (isNumberedQuestion || isStandaloneQuestion) {
+                        const question = isNumberedQuestion ? isNumberedQuestion[1] : line;
+                        console.log(`❓ Found FAQ question: "${question.substring(0, 50)}..."`);
                         
-                        // Mark both question and answer lines as used
-                        usedLines.add(tempQuestionIndex);
-                        usedLines.add(i);
+                        // Look for the answer in the next lines (within FAQ section only)
+                        let answer = '';
+                        let answerLines = [];
                         
-                        tempQuestion = '';
-                        tempQuestionIndex = -1;
+                        for (let j = i + 1; j < lines.length; j++) {
+                            const nextLine = lines[j].trim();
+                            if (!nextLine) continue;
+                            
+                            // Stop if we hit another numbered question or clear question
+                            if (nextLine.match(/^\d+\.\s*.+\?/) || 
+                                (nextLine.endsWith('?') && nextLine.match(/^(how|what|why|when|where|who)/i))) {
+                                break;
+                            }
+                            
+                            // Stop if we hit structural elements or new sections
+                            if (nextLine.includes('{') || nextLine.includes('<iframe') || 
+                                nextLine.match(/^(conclusion|summary|references|about|contact)/i)) {
+                                break;
+                            }
+                            
+                            // This looks like part of the answer
+                            if (nextLine.length > 10 && !nextLine.match(/^[A-Z\s]{5,}$/)) {
+                                answerLines.push(nextLine);
+                                usedLines.add(j);
+                                
+                                // Stop collecting after reasonable answer length or if we've gone too far
+                                if (answerLines.join(' ').length > 500 || j > i + 5) {
+                                    break;
+                                }
+                            }
+                        }
+                        
+                        answer = answerLines.join(' ').trim();
+                        
+                        if (answer && answer.length > 20) {
+                            faqs.push({ question, answer });
+                            console.log(`✅ FAQ pair: Q: "${question.substring(0, 30)}..." A: "${answer.substring(0, 40)}..."`);
+                            usedLines.add(i);
+                        } else {
+                            console.log(`⚠️ Question found but no valid answer: "${question.substring(0, 30)}..."`);
+                        }
                     }
                 }
             }
             
-            // Second pass: Build clean main content (remove all structured elements)
+            // Method 4: Fallback - loose question detection (only if no structured FAQs found)
+            if (faqs.length === 0) {
+                console.log('📋 Fallback: Looking for loose Q and A patterns...');
+                
+                let currentQuestion = '';
+                let questionIndex = -1;
+                
+                for (let i = 0; i < lines.length; i++) {
+                    const line = lines[i].trim();
+                    if (!line || usedLines.has(i)) continue;
+                    
+                    // Skip obvious non-FAQ content
+                    if (line.includes('youtube.com') || line.includes('{') || 
+                        line.match(/^(section|chapter|part|heading|figure|image|table)\s+/i)) {
+                        usedLines.add(i);
+                        continue;
+                    }
+                    
+                    if (line.endsWith('?') && line.length > 15) {
+                        currentQuestion = line;
+                        questionIndex = i;
+                    } else if (currentQuestion && line.length > 20) {
+                        // Be very selective about what constitutes an answer
+                        if (!line.match(/^[A-Z\s]{5,}$/) && // Not all caps
+                            !line.includes('Bollywood') && // Not part of main content
+                            !line.includes('Prithviraaj') && // Not part of main content
+                            line.split(' ').length > 5) { // Substantial content
+                            
+                            faqs.push({
+                                question: currentQuestion,
+                                answer: line
+                            });
+                            
+                            console.log(`✅ Loose FAQ: Q: "${currentQuestion.substring(0, 30)}..." A: "${line.substring(0, 40)}..."`);
+                            usedLines.add(questionIndex);
+                            usedLines.add(i);
+                            
+                            currentQuestion = '';
+                            questionIndex = -1;
+                        }
+                    }
+                }
+            }
+            
+            console.log(`✅ FAQ detection complete. Found ${faqs.length} FAQ pairs using precise section-aware parsing.`);
+            
+            // Second pass: Build clean main content (intelligently remove only structured elements)
             let mainContentHtml = htmlContent;
             
             if (mainContentHtml) {
-                console.log('🧹 Cleaning main content - removing structured elements...');
+                console.log('🧹 Smart content cleaning - preserving legitimate content...');
                 
-                // Remove the title from content to avoid duplication
-                if (title && title.trim()) {
-                    // Remove title from HTML (various formats)
-                    mainContentHtml = mainContentHtml.replace(new RegExp(`<h[1-6][^>]*>\\s*${title.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\s*</h[1-6]>`, 'gi'), '');
-                    mainContentHtml = mainContentHtml.replace(new RegExp(`<p[^>]*>\\s*${title.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\s*</p>`, 'gi'), '');
-                    mainContentHtml = mainContentHtml.replace(new RegExp(`<strong[^>]*>\\s*${title.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\s*</strong>`, 'gi'), '');
+                // Step 1: Remove the title from content to avoid duplication (but be more careful)
+                if (title && title.trim() && title.length > 5) {
+                    const titlePattern = title.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+                    // Only remove if it's clearly a title (in header tags or at start of content)
+                    mainContentHtml = mainContentHtml.replace(new RegExp(`<h[1-6][^>]*>\\s*${titlePattern}\\s*</h[1-6]>`, 'gi'), '');
+                    // Be more conservative with p tags - only remove if at the very beginning
+                    if (mainContentHtml.trim().startsWith(`<p`) && mainContentHtml.includes(title)) {
+                        const firstPMatch = mainContentHtml.match(/<p[^>]*>([^<]*)<\/p>/);
+                        if (firstPMatch && firstPMatch[1].trim() === title.trim()) {
+                            mainContentHtml = mainContentHtml.replace(firstPMatch[0], '');
+                        }
+                    }
                 }
                 
-                // Remove all FAQ-related content (both JSON and regular format)
+                // Step 2: Remove only FAQ section and structured data (PRESERVE HTML formatting)
+                
+                console.log('🧹 Cleaning content - preserving HTML formatting...');
+                
+                // Remove JSON-LD schema blocks (complete blocks only)
+                mainContentHtml = mainContentHtml.replace(/\{[^}]*"@context"[^}]*"schema\.org"[^}]*\}/gi, '');
+                mainContentHtml = mainContentHtml.replace(/<script[^>]*type=["']application\/ld\+json["'][^>]*>.*?<\/script>/gis, '');
+                
+                // Find and remove FAQ section more precisely (keep HTML structure)
+                // Look for FAQ heading followed by content until end of document
+                const faqHeadingRegex = /<(h[1-6]|p)[^>]*>\s*FAQs?[:.\s]*[^<]*<\/\1>/i;
+                const faqHeadingMatch = mainContentHtml.match(faqHeadingRegex);
+                
+                if (faqHeadingMatch) {
+                    const faqStartPosition = mainContentHtml.indexOf(faqHeadingMatch[0]);
+                    console.log('� Found FAQ section at position:', faqStartPosition);
+                    
+                    // Remove everything from FAQ heading to end of content
+                    mainContentHtml = mainContentHtml.substring(0, faqStartPosition);
+                    console.log('✂️ Removed FAQ section, content length now:', mainContentHtml.length);
+                } else {
+                    console.log('ℹ️ No FAQ heading found, checking for FAQ patterns...');
+                    
+                    // Alternative: Look for patterns like "FAQs" in text content
+                    const faqTextMatch = mainContentHtml.match(/FAQs?[:.\s]*/i);
+                    if (faqTextMatch) {
+                        const faqPos = mainContentHtml.indexOf(faqTextMatch[0]);
+                        // Find the parent tag
+                        const beforeFaq = mainContentHtml.substring(0, faqPos);
+                        const lastTagStart = beforeFaq.lastIndexOf('<');
+                        if (lastTagStart >= 0) {
+                            mainContentHtml = mainContentHtml.substring(0, lastTagStart);
+                            console.log('✂️ Removed FAQ section using text pattern');
+                        }
+                    }
+                }
+                
+                // Remove any remaining JSON FAQ structures (but keep HTML)
                 mainContentHtml = mainContentHtml.replace(/"name":\s*"[^"]*"/g, '');
                 mainContentHtml = mainContentHtml.replace(/"text":\s*"[^"]*"/g, '');
+                mainContentHtml = mainContentHtml.replace(/\{[^}]*"@type"[^}]*"Question"[^}]*\}/gi, '');
                 
-                // Remove FAQ section and all Q&A content
-                mainContentHtml = mainContentHtml.replace(/<p[^>]*>\s*FAQs?\s*<\/p>/gi, '');
-                mainContentHtml = mainContentHtml.replace(/<h[1-6][^>]*>\s*FAQs?\s*<\/h[1-6]>/gi, '');
-                mainContentHtml = mainContentHtml.replace(/^\s*FAQs?\s*$/gim, '');
-                
-                // Remove entire FAQ blocks (question + answer pairs)
-                mainContentHtml = mainContentHtml.replace(/<p[^>]*>[^<]*\?[^<]*<\/p>\s*<p[^>]*>[^<]*<\/p>/gi, '');
-                
-                // Remove JSON-like structures and brackets
-                mainContentHtml = mainContentHtml.replace(/\{[^}]*"@context"[^}]*\}/g, '');
-                mainContentHtml = mainContentHtml.replace(/\{[^}]*"@type"[^}]*\}/g, '');
-                mainContentHtml = mainContentHtml.replace(/\},?\s*/g, ''); // Remove },
-                mainContentHtml = mainContentHtml.replace(/\]\s*\},?\s*/g, ''); // Remove ]},
-                mainContentHtml = mainContentHtml.replace(/^\s*\}[\s,]*$/gm, ''); // Remove standalone }
-                
-                // Remove iframe embeds (YouTube, etc.) - handle all iframe variations
+                // Step 3: Remove iframes/embeds (but keep other HTML)
                 mainContentHtml = mainContentHtml.replace(/<iframe[^>]*>.*?<\/iframe>/gi, '');
                 mainContentHtml = mainContentHtml.replace(/<iframe[^>]*>/gi, ''); // Handle unclosed iframes
                 
-                // Handle the specific malformed iframe pattern (no spaces between attributes)
-                mainContentHtml = mainContentHtml.replace(/<iframe\s*width=\d+height=\d+src=https:\/\/www\.youtube\.com\/embed\/[^>]*><\/iframe>/gi, '');
-                mainContentHtml = mainContentHtml.replace(/width=\d+height=\d+src=https:\/\/www\.youtube\.com\/embed\/[^>]*allowfullscreen><\/iframe>/gi, '');
-                
-                // The ultimate iframe killer - catch any text that starts with iframe and ends with allowfullscreen></iframe>
-                mainContentHtml = mainContentHtml.replace(/<iframe.*?allowfullscreen><\/iframe>/gi, '');
-                mainContentHtml = mainContentHtml.replace(/<iframe.*?allowfullscreen[^>]*>/gi, '');
-                
-                // Catch the exact pattern you showed (super specific)
-                mainContentHtml = mainContentHtml.replace(/<iframe width=\d+height=\d+src=https:\/\/www\.youtube\.com\/embed\/[^?]*\?[^>]*allowfullscreen><\/iframe>/gi, '');
-                
-                // Remove common title fragments that might remain
-                mainContentHtml = mainContentHtml.replace(/Your Career Path Is as Unique as Your Fingerprint/gi, '');
-                mainContentHtml = mainContentHtml.replace(/Career Path.*?Fingerprint/gi, '');
-                
-                // Remove images (feature images and content images) - they're extracted as separate files
+                // Step 4: Remove images from content (they're extracted separately)
                 mainContentHtml = mainContentHtml.replace(/<img[^>]*>/gi, '');
-                console.log('🖼️ Removed embedded images from content (extracted as separate files)');
+                console.log('🖼️ Removed embedded images and videos from content');
                 
-                // Remove links that are just URLs or embeds
-                mainContentHtml = mainContentHtml.replace(/<a[^>]*href=["'][^"']*youtube\.com[^"']*["'][^>]*>.*?<\/a>/gi, '');
-                mainContentHtml = mainContentHtml.replace(/<a[^>]*href=["']https?:\/\/[^"']*["'][^>]*>[^<]*<\/a>/gi, '');
-                
-                // Remove question-answer pairs that look like FAQs
-                mainContentHtml = mainContentHtml.replace(/<p[^>]*>[^<]*\?[^<]*<\/p>\s*<p[^>]*>[^<]*<\/p>/gi, '');
-                
-                // Add proper spacing and clean up elements
+                // Step 5: Clean up empty tags and excessive spacing (preserve structure)
                 mainContentHtml = mainContentHtml
-                    .replace(/<\/h([1-6])>/g, '</h$1>\n\n') // Add double line breaks after headers
-                    .replace(/<\/p>/g, '</p>\n\n') // Add double line breaks after paragraphs  
-                    .replace(/<\/div>/g, '</div>\n\n') // Add line breaks after divs
-                    .replace(/<br\s*\/?>/g, '\n') // Convert br tags to line breaks
                     .replace(/<p>\s*<\/p>/g, '') // Remove empty paragraphs
                     .replace(/<div>\s*<\/div>/g, '') // Remove empty divs
-                    .replace(/^\s*,\s*/gm, '') // Remove leading commas
-                    .replace(/\n\s*\n\s*\n+/g, '\n\n') // Normalize multiple line breaks to double
-                    .replace(/\s*"\s*/g, '') // Remove orphaned quotes
-                    .replace(/\s*,\s*\n/g, '\n') // Remove trailing commas
+                    .replace(/<h[1-6]>\s*<\/h[1-6]>/g, '') // Remove empty headings
+                    .replace(/\n\s*\n\s*\n+/g, '\n\n') // Normalize line breaks
                     .trim();
                 
-                // NUCLEAR OPTION - Remove any line containing iframe/youtube content
-                mainContentHtml = mainContentHtml.replace(/.*iframe.*width.*height.*src.*youtube\.com.*$/gmi, '');
-                mainContentHtml = mainContentHtml.replace(/.*width=\d+.*height=\d+.*youtube\.com.*$/gmi, '');
-                mainContentHtml = mainContentHtml.replace(/.*allowfullscreen.*$/gmi, '');
-                mainContentHtml = mainContentHtml.replace(/.*frameborder.*$/gmi, '');
-                
-                // Additional aggressive cleanup for remaining structured content
-                mainContentHtml = mainContentHtml.replace(/FAQs[^}]*\}\s*,?\s*\}\s*,?\s*\}\s*,?\s*\}\s*,?\s*\]/gi, '');
-                mainContentHtml = mainContentHtml.replace(/\{[^}]*\},?\s*\},?\s*\},?\s*\},?\s*\]/gi, '');
-                mainContentHtml = mainContentHtml.replace(/\}\s*,\s*\}\s*,\s*\}/gi, '');
-                mainContentHtml = mainContentHtml.replace(/\]\s*$/g, ''); // Remove trailing ]
-                
-                // Remove the specific malformed iframe pattern - more comprehensive
-                mainContentHtml = mainContentHtml.replace(/<iframe\s*width=\d+height=\d+src=https:\/\/www\.youtube\.com\/embed\/[^?]*\?[^>]*>/gi, '');
-                mainContentHtml = mainContentHtml.replace(/width=\d+height=\d+src=https:\/\/www\.youtube\.com\/embed\/[^>]*allowfullscreen><\/iframe>/gi, '');
-                mainContentHtml = mainContentHtml.replace(/<iframe\s*width=\d+height=\d+src=https:\/\/[^>]*allowfullscreen><\/iframe>/gi, '');
-                
-                // Remove FAQ sections and fragments more aggressively
-                mainContentHtml = mainContentHtml.replace(/^\s*FAQs\s*$/gmi, '');
-                mainContentHtml = mainContentHtml.replace(/How can I [^?]*\?\s*[^?]*\?/gi, ''); 
-                mainContentHtml = mainContentHtml.replace(/Why is [^?]*\?\s*[^?]*\?/gi, ''); 
-                mainContentHtml = mainContentHtml.replace(/How do I [^?]*\?\s*[^?]*\?/gi, ''); 
-                mainContentHtml = mainContentHtml.replace(/What are [^?]*\?\s*[^?]*\?/gi, ''); 
-                
-                // Remove quote fragments and FAQ remnants
-                mainContentHtml = mainContentHtml.replace(/"\s*Seek feedback from a colleague[^"]*"/gi, '');
-                mainContentHtml = mainContentHtml.replace(/"\s*Note connections to your work[^"]*"/gi, '');
-                mainContentHtml = mainContentHtml.replace(/"\s*Take one action[^"]*"/gi, '');
-                mainContentHtml = mainContentHtml.replace(/"\s*Reflect on its impact[^"]*"/gi, '');
-                mainContentHtml = mainContentHtml.replace(/^\s*"\s*$/gmi, ''); // Remove standalone quotes
-                
-                // Remove any remaining iframe-like content without proper tags
-                mainContentHtml = mainContentHtml.replace(/frameborder=\d+[^<>\s]*allowfullscreen[^<>\s]*/gi, '');
-                mainContentHtml = mainContentHtml.replace(/title="[^"]*"[^<>\s]*src="[^"]*youtube[^"]*"/gi, '');
-                
-                // Remove the complete iframe with all attributes (the exact pattern you showed)
-                mainContentHtml = mainContentHtml.replace(/<iframe width=\d+height=\d+src=https:\/\/www\.youtube\.com\/embed\/[^>]*allowfullscreen><\/iframe>/gi, '');
-                
-                // Remove entire FAQ blocks (more comprehensive)
-                mainContentHtml = mainContentHtml.replace(/FAQs[\s\S]*?\]/gi, ''); // Remove everything from FAQs to closing ]
-                
-                // Remove any remaining FAQ fragments with quotes
-                mainContentHtml = mainContentHtml.replace(/"\s*Seek feedback[\s\S]*?confidence\./gi, '');
-                mainContentHtml = mainContentHtml.replace(/"\s*Note connections[\s\S]*?work\./gi, '');
-                mainContentHtml = mainContentHtml.replace(/"\s*Take one action[\s\S]*?mindset\./gi, '');
-                mainContentHtml = mainContentHtml.replace(/"\s*Reflect on[\s\S]*?weeks\./gi, '');
-                
-                // Remove any lines that are just quotes or fragments
-                mainContentHtml = mainContentHtml.replace(/^\s*"\s*$/gmi, ''); // Empty quotes
-                mainContentHtml = mainContentHtml.replace(/^\s*\]\s*$/gmi, ''); // Standalone closing brackets
-                
-                // Remove any remaining title fragments or metadata
-                mainContentHtml = mainContentHtml.replace(/^\s*[A-Z][^.!?]*Fingerprint\s*$/gmi, '');
-                mainContentHtml = mainContentHtml.replace(/^\s*Career.*?Path.*$/gmi, '');
-                mainContentHtml = mainContentHtml.replace(/^\s*Your.*?Career.*$/gmi, '');
-                
-                console.log('✅ Main content cleaned - removed FAQs, schemas, images, embeds, and remaining fragments');
+                console.log('✅ Content cleaning complete - HTML formatting preserved');
             }
 
             // 5. Set clean main content in Quill editor (preserve HTML formatting but exclude structured elements)
-            if (mainContentHtml && mainContentHtml.trim()) {
+            console.log('📝 Final content length:', mainContentHtml ? mainContentHtml.trim().length : 0);
+            console.log('📝 Content preview:', mainContentHtml ? mainContentHtml.trim().substring(0, 200) + '...' : 'No content');
+            
+            if (mainContentHtml && mainContentHtml.trim().length > 100) {
                 // Use setContents with HTML to preserve formatting
-                const delta = quill.clipboard.convert(mainContentHtml);
-                quill.setContents(delta);
-                console.log('✅ Set clean HTML content in editor (FAQs, images, schemas excluded)');
+                try {
+                    const delta = quill.clipboard.convert(mainContentHtml);
+                    quill.setContents(delta);
+                    console.log('✅ Set clean HTML content in editor (structured elements excluded)');
+                } catch (error) {
+                    console.warn('⚠️ Error setting HTML content, using plain text:', error);
+                    // Fallback to plain text
+                    const plainText = mainContentHtml.replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim();
+                    quill.setText(plainText);
+                }
+            } else if (plainTextContent && plainTextContent.trim().length > 50) {
+                // Fallback to original plain text if HTML cleaning removed too much
+                console.log('⚠️ HTML cleaning removed too much content, using plain text fallback');
+                let fallbackText = plainTextContent;
+                
+                // Remove only obvious structured elements from plain text
+                fallbackText = fallbackText.replace(/"name":\s*"[^"]*"/g, '');
+                fallbackText = fallbackText.replace(/"text":\s*"[^"]*"/g, '');
+                fallbackText = fallbackText.replace(/\{[^}]*"@context"[^}]*\}/g, '');
+                fallbackText = fallbackText.replace(/^\s*FAQs?\s*$/gm, '');
+                fallbackText = fallbackText.replace(/\s+/g, ' ').trim();
+                
+                if (fallbackText.length > 50) {
+                    quill.setText(fallbackText);
+                    console.log('✅ Used plain text fallback content');
+                } else {
+                    quill.setText('Content detected but appears to be mostly structured data. Please add your main content manually.');
+                    console.log('⚠️ Even plain text fallback insufficient');
+                }
             } else {
-                // If no clean content available, show a message
-                quill.setText('No main content detected after removing structured elements (FAQs, images, schemas).');
-                console.log('⚠️ No clean content available after filtering');
+                // If no clean content available, show a helpful message
+                quill.setText('Document parsed successfully, but main content appears to be mostly structured elements (FAQs, schemas, etc.). Please add your main content here.');
+                console.log('ℹ️ No substantial main content detected - document may be primarily structured data');
             }
 
             // 6. Auto-fill FAQs
@@ -877,15 +1069,38 @@
                 dateElement.value = new Date().toISOString().split('T')[0];
             }
 
-            // 8. Show success message with parsing results
+            // 8. Show detailed parsing results with debugging info
             const results = [];
-            if (title) results.push('title');
-            if (mainContent) results.push('main content');
-            if (faqs.length > 0) results.push(`${faqs.length} FAQs`);
+            if (title) results.push(`title: "${title.substring(0, 40)}..."`);
+            if (mainContentHtml && mainContentHtml.trim().length > 100) results.push(`main content (${Math.round(mainContentHtml.trim().length/1000)}k chars)`);
+            if (faqs.length > 0) results.push(`${faqs.length} FAQ${faqs.length > 1 ? 's' : ''}`);
             if (videoUrl) results.push('YouTube video');
             if (jsonLdContent) results.push('JSON-LD schema');
+            if (data.extractedImages && data.extractedImages.length > 0) results.push(`${data.extractedImages.length} image${data.extractedImages.length > 1 ? 's' : ''}`);
             
-            alert(`✅ Document parsed successfully!\n\nExtracted: ${results.join(', ')}\n\nPlease review and edit as needed before submitting.`);
+            // Enhanced success message with parsing details
+            let message = `✅ Document parsed successfully!\n\n`;
+            message += `📊 EXTRACTED CONTENT:\n`;
+            message += results.length > 0 ? results.map(r => `• ${r}`).join('\n') : '• No content detected';
+            
+            if (data.contentQuality) {
+                message += `\n\n📈 DOCUMENT ANALYSIS:\n`;
+                message += `• ${data.contentQuality.wordCount} total words\n`;
+                message += `• ${data.contentQuality.hasQuestions} questions found\n`;
+                message += `• Document type: ${data.contentQuality.likelyHasFAQs ? 'FAQ-heavy' : 'Standard article'}\n`;
+            }
+            
+            if (data.parsingNotes && data.parsingNotes.length > 0) {
+                message += `\n📝 PARSING NOTES:\n`;
+                message += data.parsingNotes.map(note => `• ${note}`).join('\n');
+            }
+            
+            message += `\n\n⚡ Please review and edit as needed before submitting.`;
+            
+            alert(message);
+            
+            // Show debug information if available
+            showDebugInfo(data, faqs, mainContentHtml, faqStartIndex);
             
             // Show the form
             const uploadSection = document.getElementById('uploadSection');
@@ -1013,75 +1228,6 @@
             }
         }
 
-        // Client-side ZIP creation for serverless mode
-        async function createClientSideZip(result) {
-            // Load JSZip library if not already loaded
-            if (typeof JSZip === 'undefined') {
-                console.log('Loading JSZip library...');
-                const script = document.createElement('script');
-                script.src = 'https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js';
-                document.head.appendChild(script);
-                
-                await new Promise((resolve) => {
-                    script.onload = resolve;
-                });
-            }
-            
-            const zip = new JSZip();
-            
-            // Add the HTML file
-            zip.file(result.filename, result.html);
-            
-            // Add images if they exist
-            const images = [];
-            if (result.blogEntry && result.blogEntry.featureImage && result.blogEntry.featureImage !== 'none') {
-                // Get feature image from the form
-                const featureImageInput = document.getElementById('featureImage');
-                if (featureImageInput && featureImageInput.files[0]) {
-                    images.push({
-                        name: result.featureImage,
-                        file: featureImageInput.files[0]
-                    });
-                }
-            }
-            
-            const contentImageInput = document.getElementById('contentImage');
-            if (contentImageInput && contentImageInput.files[0]) {
-                images.push({
-                    name: result.contentImage,
-                    file: contentImageInput.files[0]
-                });
-            }
-            
-            // Add images to ZIP
-            for (const image of images) {
-                if (image.file && image.name !== 'none') {
-                    const arrayBuffer = await image.file.arrayBuffer();
-                    zip.file(`images/${image.name}`, arrayBuffer);
-                    console.log(`📷 Added image to ZIP: ${image.name}`);
-                }
-            }
-            
-            // Generate and download ZIP
-            const zipBlob = await zip.generateAsync({ type: 'blob' });
-            
-            // Create download link
-            const downloadLink = document.createElement('a');
-            downloadLink.href = URL.createObjectURL(zipBlob);
-            downloadLink.download = `${result.filename.replace('.html', '')}-blog-package.zip`;
-            downloadLink.style.display = 'none';
-            document.body.appendChild(downloadLink);
-            downloadLink.click();
-            document.body.removeChild(downloadLink);
-            
-            // Clean up object URL
-            setTimeout(() => {
-                URL.revokeObjectURL(downloadLink.href);
-            }, 1000);
-            
-            console.log(`📦 Downloaded: ${downloadLink.download}`);
-        }
-
         // Form submission
         document.getElementById('blogForm').addEventListener('submit', async function(e) {
             e.preventDefault();
@@ -1157,54 +1303,6 @@
                 if (result.success) {
                     document.getElementById('successMessage').textContent = result.message;
                     document.getElementById('viewBlogLink').href = `./blogs/${result.filename}`;
-                    
-                    // Handle both serverless and regular download modes
-                    if (result.downloadUrl) {
-                        // Traditional file-based download
-                        console.log('📦 Download URL received:', result.downloadUrl);
-                        
-                        // Add download button to modal
-                        const downloadBtn = document.getElementById('downloadBtn');
-                        if (downloadBtn) {
-                            downloadBtn.href = result.downloadUrl;
-                            downloadBtn.style.display = 'block';
-                        }
-                        
-                        setTimeout(() => {
-                            try {
-                                const downloadLink = document.createElement('a');
-                                downloadLink.href = result.downloadUrl;
-                                downloadLink.download = ''; // Force download
-                                downloadLink.style.display = 'none';
-                                document.body.appendChild(downloadLink);
-                                downloadLink.click();
-                                document.body.removeChild(downloadLink);
-                                console.log('📦 Blog package download started');
-                            } catch (error) {
-                                console.error('Download error:', error);
-                                alert('Auto-download failed. Please use the manual download button.');
-                            }
-                        }, 1000); // Small delay to let user see success message
-                    } else if (result.serverlessMode && result.html) {
-                        // Serverless mode - create ZIP on client side
-                        console.log('📦 Serverless mode: Creating ZIP client-side');
-                        
-                        // Hide the view blog link since we don't have a file to view
-                        document.getElementById('viewBlogLink').style.display = 'none';
-                        
-                        setTimeout(async () => {
-                            try {
-                                await createClientSideZip(result);
-                                console.log('📦 Client-side ZIP download started');
-                            } catch (error) {
-                                console.error('Client-side ZIP creation failed:', error);
-                                alert('Download failed. Please try again.');
-                            }
-                        }, 1000);
-                    } else {
-                        console.error('No download method available in response:', result);
-                        alert('Download not available. Blog created but cannot be downloaded.');
-                    }
                     
                     const modal = new bootstrap.Modal(document.getElementById('successModal'));
                     modal.show();

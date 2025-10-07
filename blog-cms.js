@@ -5,42 +5,31 @@ const path = require('path');
 const readline = require('readline');
 
 class BlogCMS {
-    constructor(isServerless = false) {
+    constructor() {
         this.blogsJsonPath = './blogs.json';
         this.templatePath = './coaching-black-white.html';
         this.imagesDir = './imagesofblog';
         this.blogsDir = './blogs';
-        this.isServerless = isServerless;
         
-        // Ensure directories exist (only in local environment)
-        if (!this.isServerless) {
-            this.ensureDirectories();
-        }
+        // Ensure directories exist
+        this.ensureDirectories();
         
         // Load existing blogs
         this.blogs = this.loadBlogs();
         
-        // Setup readline interface (only in local environment)
-        if (!this.isServerless) {
-            this.rl = readline.createInterface({
-                input: process.stdin,
-                output: process.stdout
-            });
-        }
+        // Setup readline interface
+        this.rl = readline.createInterface({
+            input: process.stdin,
+            output: process.stdout
+        });
     }
 
     ensureDirectories() {
-        try {
-            if (!fs.existsSync(this.imagesDir)) {
-                fs.mkdirSync(this.imagesDir, { recursive: true });
-            }
-            if (!fs.existsSync(this.blogsDir)) {
-                fs.mkdirSync(this.blogsDir, { recursive: true });
-            }
-        } catch (error) {
-            if (!this.isServerless) {
-                console.warn('Could not create directories:', error.message);
-            }
+        if (!fs.existsSync(this.imagesDir)) {
+            fs.mkdirSync(this.imagesDir, { recursive: true });
+        }
+        if (!fs.existsSync(this.blogsDir)) {
+            fs.mkdirSync(this.blogsDir, { recursive: true });
         }
     }
 
@@ -57,12 +46,6 @@ class BlogCMS {
     }
 
     saveBlogs() {
-        if (this.isServerless) {
-            // In serverless environment, we can't save to disk
-            console.log('📄 Serverless mode: Skipping blogs.json file write');
-            return JSON.stringify(this.blogs, null, 4);
-        }
-        
         try {
             fs.writeFileSync(this.blogsJsonPath, JSON.stringify(this.blogs, null, 4));
             console.log('✅ blogs.json updated successfully!');

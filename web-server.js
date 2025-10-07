@@ -2,18 +2,14 @@ const http = require('http');
 const fs = require('fs');
 const path = require('path');
 const url = require('url');
-const os = require('os');
 const { IncomingForm } = require('formidable');
 const mammoth = require('mammoth');
-const archiver = require('archiver');
 const BlogCMS = require('./blog-cms');
 
 class WebCMSServer {
-    constructor(port = process.env.PORT || 3000) {
+    constructor(port = 3000) {
         this.port = port;
-        // Detect if running in serverless environment (GCP App Engine)
-        const isServerless = !!process.env.GAE_SERVICE || !!process.env.PORT;
-        this.cms = new BlogCMS(isServerless);
+        this.cms = new BlogCMS();
         this.server = http.createServer(this.handleRequest.bind(this));
         
         console.log('🌟 xMonks Blog CMS Web Server 🌟');
@@ -46,8 +42,6 @@ class WebCMSServer {
                 this.handleParseDocx(req, res);
             } else if (pathname === '/api/blogs' && method === 'GET') {
                 this.handleGetBlogs(res);
-            } else if (pathname === '/api/download-blog' && method === 'GET') {
-                this.handleDownloadBlog(req, res);
             } else if (pathname.startsWith('/blogs/') || pathname.startsWith('/imagesofblog/')) {
                 this.serveStaticFile(req, res);
             } else if (pathname.endsWith('.css') || pathname.endsWith('.js')) {
@@ -251,16 +245,16 @@ class WebCMSServer {
 
     async handleParseDocx(req, res) {
         try {
-            // Use system temp directory for GCP compatibility
-            const tempDir = os.tmpdir();
-            
             const form = new IncomingForm({
-                uploadDir: tempDir,
+                uploadDir: './temp',
                 keepExtensions: true,
                 maxFileSize: 50 * 1024 * 1024, // 50MB limit
             });
 
-            // No need to create temp directory - os.tmpdir() always exists
+            // Ensure temp directory exists
+            if (!fs.existsSync('./temp')) {
+                fs.mkdirSync('./temp', { recursive: true });
+            }
 
             form.parse(req, async (err, fields, files) => {
                 if (err) {
@@ -276,34 +270,32 @@ class WebCMSServer {
                         return this.sendError(res, 'No DOCX file uploaded');
                     }
 
-                    // Track extracted images with base64 data for GCP compatibility
+                    // Ensure imagesofblog directory exists
+                    if (!fs.existsSync('./imagesofblog')) {
+                        fs.mkdirSync('./imagesofblog', { recursive: true });
+                    }
+
+                    // Track extracted images
                     const extractedImages = [];
                     let imageCounter = 0;
 
-                    // Custom image converter to handle images as base64 (serverless-friendly)
+                    // Custom image converter to save images as files
                     const options = {
                         convertImage: mammoth.images.imgElement(function(image) {
                             imageCounter++;
                             const extension = image.contentType.split('/')[1] || 'png';
                             const fileName = `extracted-image-${Date.now()}-${imageCounter}.${extension}`;
+                            const imagePath = path.join('./imagesofblog', fileName);
                             
-                            // Convert image to base64 for serverless environment
+                            // Save image to file
                             return image.read().then(function(imageBuffer) {
-                                const base64 = imageBuffer.toString('base64');
-                                const mimeType = image.contentType || 'image/png';
-                                const dataUri = `data:${mimeType};base64,${base64}`;
+                                fs.writeFileSync(imagePath, imageBuffer);
+                                extractedImages.push(fileName);
+                                console.log(`📸 Extracted image: ${fileName}`);
                                 
-                                extractedImages.push({
-                                    fileName: fileName,
-                                    base64: base64,
-                                    mimeType: mimeType,
-                                    dataUri: dataUri
-                                });
-                                console.log(`📸 Extracted image: ${fileName} (${Math.round(imageBuffer.length / 1024)}KB)`);
-                                
-                                // Return img tag with data URI
+                                // Return img tag with relative path
                                 return {
-                                    src: dataUri,
+                                    src: `./imagesofblog/${fileName}`,
                                     alt: `Extracted image ${imageCounter}`
                                 };
                             });
@@ -366,10 +358,9 @@ class WebCMSServer {
                         content: plainText, // Add plain text content for smart parsing
                         sections: sections,
                         jsonLD: jsonLD,
-                        extractedImages: extractedImages, // List of extracted image objects with base64
-                        featureImage: extractedImages[0] ? extractedImages[0].dataUri : '', // First image as feature
-                        contentImage: extractedImages[1] ? extractedImages[1].dataUri : '', // Second image as content
-                        imageCount: extractedImages.length, // Number of images found
+                        extractedImages: extractedImages, // List of extracted image filenames
+                        featureImage: extractedImages[0] || '', // First image as feature
+                        contentImage: extractedImages[1] || '', // Second image as content
                         messages: htmlResult.messages
                     }));
 
@@ -635,41 +626,42 @@ class WebCMSServer {
             // Generate filename and save
             const slug = this.cms.generateSlug(blogData.title);
             const filename = `${slug}.html`;
+            const filePath = path.join('./blogs', filename);
             
-            // In serverless environment, we can't write files
-            // Instead, we'll return the HTML content for download
-            console.log(`✅ Generated blog HTML: ${filename}`);
+            // Ensure blogs directory exists
+            if (!fs.existsSync('./blogs')) {
+                fs.mkdirSync('./blogs', { recursive: true });
+            }
+            
+            fs.writeFileSync(filePath, html);
 
-            // Prepare blog entry data (for potential future database storage)
+            // Add to blogs.json
             const featureImageName = blogData.featureImage?.name || '';
             const blogEntry = {
                 title: blogData.title,
                 date: this.cms.formatDate(blogData.date),
                 image: featureImageName ? `./blogs/imagesofblog/${featureImageName}` : "",
                 link: `./blogs/${filename}`,
-                category: blogData.category,
-                html: html, // Include HTML content for download
-                filename: filename
+                category: blogData.category
             };
 
-            // Note: In serverless environment, we can't update blogs.json persistently
-            console.log(`📝 Blog entry prepared: ${blogData.title}`);
+            console.log(`📊 Current number of blogs before adding: ${this.cms.blogs.length}`);
+            this.cms.blogs.push(blogEntry);
+            console.log(`📊 Current number of blogs after adding: ${this.cms.blogs.length}`);
+            console.log(`✅ New blog added to array:`, blogEntry);
             
-            // Skip saveBlogs() in serverless environment as it can't persist
-            console.log('📄 Serverless mode: HTML generated in memory for download');
+            this.cms.saveBlogs();
+            console.log(`💾 Saved ${this.cms.blogs.length} blogs to blogs.json`);
 
-            // Send success response with blog content for immediate download
+            // Send success response
             res.writeHead(200, { 'Content-Type': 'application/json' });
             res.end(JSON.stringify({
                 success: true,
-                message: 'Blog post created successfully! Ready for download.',
+                message: 'Blog post created successfully!',
                 filename: filename,
-                html: html, // Include HTML content for download
-                blogEntry: blogEntry, // Include blog metadata
+                path: filePath,
                 featureImage: featureImageName || 'none',
-                contentImage: blogData.contentImage?.name || 'none',
-                serverlessMode: true,
-                downloadReady: true
+                contentImage: blogData.contentImage?.name || 'none'
             }));
 
             console.log(`✅ Blog created: ${filename}`);
@@ -694,104 +686,6 @@ class WebCMSServer {
             }));
         } catch (error) {
             this.sendError(res, error.message);
-        }
-    }
-
-    handleDownloadBlog(req, res) {
-        try {
-            console.log('📦 Download request received:', req.url);
-            
-            const parsedUrl = url.parse(req.url, true);
-            const query = parsedUrl.query;
-            const filename = query.filename;
-            const featureImage = query.featureImage;
-            const contentImage = query.contentImage;
-
-            console.log('📦 Download params:', { filename, featureImage, contentImage });
-
-            if (!filename) {
-                return this.sendError(res, 'Filename is required');
-            }
-
-            // Create ZIP file
-            const archive = archiver('zip', {
-                zlib: { level: 9 } // Best compression
-            });
-
-            // Set response headers for file download
-            const zipFilename = `${filename.replace('.html', '')}-blog-package.zip`;
-            res.writeHead(200, {
-                'Content-Type': 'application/zip',
-                'Content-Disposition': `attachment; filename="${zipFilename}"`
-            });
-
-            // Handle archive events
-            archive.on('error', (err) => {
-                console.error('Archive error:', err);
-                this.sendError(res, 'Error creating ZIP file');
-            });
-
-            archive.on('end', () => {
-                console.log('📦 Archive completed successfully');
-            });
-
-            // Pipe archive to response
-            archive.pipe(res);
-
-            // Add blog HTML file
-            const blogPath = path.join('./blogs', filename);
-            if (fs.existsSync(blogPath)) {
-                archive.file(blogPath, { name: filename });
-            }
-
-            // Add feature image if exists
-            if (featureImage && featureImage !== '') {
-                const featureImagePath = path.join('./imagesofblog', featureImage);
-                if (fs.existsSync(featureImagePath)) {
-                    archive.file(featureImagePath, { name: `images/${featureImage}` });
-                }
-            }
-
-            // Add content image if exists and different from feature image
-            if (contentImage && contentImage !== '' && contentImage !== featureImage) {
-                const contentImagePath = path.join('./imagesofblog', contentImage);
-                if (fs.existsSync(contentImagePath)) {
-                    archive.file(contentImagePath, { name: `images/${contentImage}` });
-                }
-            }
-
-            // Add blogs.json
-            if (fs.existsSync('./blogs.json')) {
-                archive.file('./blogs.json', { name: 'blogs.json' });
-            }
-
-            // Add README with instructions
-            const readmeContent = `# Blog Package
-
-This ZIP contains:
-1. ${filename} - Your blog HTML file
-2. images/ - All images used in the blog
-3. blogs.json - Updated blog index
-
-## Setup Instructions:
-1. Extract all files
-2. Place the HTML file in your blog directory
-3. Place images in your images directory
-4. Update your blog index with blogs.json
-
-Generated by xMonks CMS - ${new Date().toISOString()}
-`;
-            
-            archive.append(readmeContent, { name: 'README.md' });
-
-            // Finalize archive
-            archive.finalize();
-
-            console.log(`📦 ZIP download created: ${zipFilename}`);
-
-        } catch (error) {
-            console.error('Error creating ZIP download:', error);
-            this.sendError(res, 'Error creating download package');
         }
     }
 
@@ -889,8 +783,7 @@ Generated by xMonks CMS - ${new Date().toISOString()}
 }
 
 // Start the server
-const port = process.env.PORT || 3000;
-const server = new WebCMSServer(port);
+const server = new WebCMSServer(3000);
 server.start();
 
 module.exports = WebCMSServer;
